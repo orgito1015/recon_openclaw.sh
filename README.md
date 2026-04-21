@@ -1,7 +1,7 @@
 ![image](recon_openclaw.jpg)
 
 
-# 🦞⚡ recon_openclaw
+# recon_openclaw
 
 Automated bug bounty reconnaissance pipeline that runs a full recon workflow and optionally launches **OpenClaw** for AI-assisted analysis of results.
 
