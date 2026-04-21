@@ -283,10 +283,10 @@ if ! should_skip "report"; then
     step "Step 10/10 - Generating report..."
     start_timer
 
-    SUBDOMAIN_COUNT=$(wc -l < "$OUT/subdomains/all.txt" 2>/dev/null || echo 0)
-    ALIVE_COUNT=$(wc -l < "$OUT/alive/alive.txt" 2>/dev/null || echo 0)
-    URL_COUNT=$(wc -l < "$OUT/urls/all_urls.txt" 2>/dev/null || echo 0)
-    NUCLEI_COUNT=$(wc -l < "$OUT/vulnerabilities/nuclei.txt" 2>/dev/null || echo 0)
+    SUBDOMAIN_COUNT=$(wc -l < "$OUT/subdomains/all.txt" 2>/dev/null | tr -d ' '); SUBDOMAIN_COUNT=${SUBDOMAIN_COUNT:-0}
+    ALIVE_COUNT=$(wc -l < "$OUT/alive/alive.txt" 2>/dev/null | tr -d ' ')      ; ALIVE_COUNT=${ALIVE_COUNT:-0}
+    URL_COUNT=$(wc -l < "$OUT/urls/all_urls.txt" 2>/dev/null | tr -d ' ')      ; URL_COUNT=${URL_COUNT:-0}
+    NUCLEI_COUNT=$(wc -l < "$OUT/vulnerabilities/nuclei.txt" 2>/dev/null | tr -d ' '); NUCLEI_COUNT=${NUCLEI_COUNT:-0}
 
     {
         echo "# Bug Bounty Recon Report"
@@ -320,10 +320,10 @@ if ! should_skip "report"; then
 {
   "target": "$TARGET",
   "timestamp": "$TS",
-  "subdomain_count": $SUBDOMAIN_COUNT,
-  "live_host_count": $ALIVE_COUNT,
-  "url_count": $URL_COUNT,
-  "nuclei_finding_count": $NUCLEI_COUNT
+  "subdomain_count": ${SUBDOMAIN_COUNT:-0},
+  "live_host_count": ${ALIVE_COUNT:-0},
+  "url_count": ${URL_COUNT:-0},
+  "nuclei_finding_count": ${NUCLEI_COUNT:-0}
 }
 JSON
 

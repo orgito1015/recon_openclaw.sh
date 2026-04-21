@@ -107,31 +107,31 @@ export PATH=$PATH:$GOPATH/bin
 info "Installing Go-based tools..."
 
 info "  -> subfinder"
-go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest      # pinned: v2.6.6
+go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest      # tested: v2.6.6
 
 info "  -> httpx"
-go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest                  # pinned: v1.6.10
+go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest                  # tested: v1.6.10
 
 info "  -> katana"
-go install -v github.com/projectdiscovery/katana/cmd/katana@latest                # pinned: v1.1.2
+go install -v github.com/projectdiscovery/katana/cmd/katana@latest                # tested: v1.1.2
 
 info "  -> naabu"
-go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest               # pinned: v2.3.3
+go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest               # tested: v2.3.3
 
 info "  -> nuclei"
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest             # pinned: v3.3.9
+go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest             # tested: v3.3.9
 
 info "  -> gau"
-go install -v github.com/lc/gau/v2/cmd/gau@latest                                 # pinned: v2.2.3
+go install -v github.com/lc/gau/v2/cmd/gau@latest                                 # tested: v2.2.3
 
 info "  -> waybackurls"
-go install -v github.com/tomnomnom/waybackurls@latest                             # pinned: v0.1.0
+go install -v github.com/tomnomnom/waybackurls@latest                             # tested: v0.1.0
 
 info "  -> assetfinder"
-go install -v github.com/tomnomnom/assetfinder@latest                             # pinned: v0.1.1
+go install -v github.com/tomnomnom/assetfinder@latest                             # tested: v0.1.1
 
 info "  -> gowitness"
-go install -v github.com/sensepost/gowitness@latest                               # pinned: v3.0.7
+go install -v github.com/sensepost/gowitness@latest                               # tested: v3.0.7
 
 # ─── SecLists ────────────────────────────────────────────────────────────────
 if [[ ! -d /usr/share/seclists ]]; then
