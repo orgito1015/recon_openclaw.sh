@@ -58,6 +58,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --threads)
             THREADS="$2"
+            if ! [[ "$THREADS" =~ ^[0-9]+$ ]] || [[ "$THREADS" -eq 0 ]]; then
+                error "--threads requires a positive integer, got: '$THREADS'"
+                usage
+                exit 1
+            fi
             shift 2
             ;;
         --output-dir)
@@ -91,26 +96,6 @@ should_skip() {
     echo "$SKIP_STEPS" | tr ',' '\n' | grep -qx "$1"
 }
 
-# ─── Output Directory Setup ──────────────────────────────────────────────────
-TS=$(date +"%Y%m%d_%H%M%S")
-if [[ -n "$OUTPUT_DIR" ]]; then
-    OUT="$OUTPUT_DIR"
-else
-    OUT="recon_${TARGET}_${TS}"
-fi
-
-mkdir -p "$OUT"/{subdomains,alive,urls,ports,technologies,screenshots,vulnerabilities,report}
-
-# ─── Error Log ───────────────────────────────────────────────────────────────
-ERROR_LOG="$OUT/report/errors.log"
-
-log_error() {
-    local step_name="$1"
-    local msg="$2"
-    echo "[$(date +"%Y-%m-%d %H:%M:%S")] [STEP: $step_name] $msg" >> "$ERROR_LOG"
-    error "$step_name: $msg"
-}
-
 # ─── Tool Check ──────────────────────────────────────────────────────────────
 REQUIRED_TOOLS=(subfinder assetfinder httpx gau waybackurls katana naabu nmap whatweb ffuf gowitness nuclei nikto)
 MISSING_TOOLS=()
@@ -128,6 +113,27 @@ if [[ ${#MISSING_TOOLS[@]} -gt 0 ]]; then
     error "Run: sudo ./scripts/install_tools.sh"
     exit 1
 fi
+
+# ─── Output Directory Setup ──────────────────────────────────────────────────
+TS=$(date +"%Y%m%d_%H%M%S")
+if [[ -n "$OUTPUT_DIR" ]]; then
+    OUT="$OUTPUT_DIR"
+else
+    OUT="recon_${TARGET}_${TS}"
+fi
+
+mkdir -p "$OUT"/{subdomains,alive,urls,ports,technologies,screenshots,vulnerabilities,report} \
+    || { error "Cannot create output directory '$OUT': permission denied or invalid path"; exit 1; }
+
+# ─── Error Log ───────────────────────────────────────────────────────────────
+ERROR_LOG="$OUT/report/errors.log"
+
+log_error() {
+    local step_name="$1"
+    local msg="$2"
+    echo "[$(date +"%Y-%m-%d %H:%M:%S")] [STEP: $step_name] $msg" >> "$ERROR_LOG"
+    error "$step_name: $msg"
+}
 
 # ─── Timer Helpers ───────────────────────────────────────────────────────────
 STEP_START=0
