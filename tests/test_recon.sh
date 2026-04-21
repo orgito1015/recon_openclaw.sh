@@ -30,7 +30,9 @@ new_tmpdir() {
 }
 
 cleanup() {
-    for d in "${TEMP_DIRS[@]+"${TEMP_DIRS[@]}"}"; do
+    local d
+    for d in "${TEMP_DIRS[@]:-}"; do
+        [[ -z "$d" ]] && continue
         chmod -R u+rwx "$d" 2>/dev/null || true
         rm -rf "$d"
     done
@@ -568,10 +570,13 @@ json_content=$(cat "$_INTEG_OUT_DIR/report/summary.json" 2>/dev/null)
 # Validate JSON structure with python3 (or python if python3 unavailable)
 _python=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "")
 if [[ -n "$_python" ]]; then
-    if echo "$json_content" | "$_python" -c "import json,sys; json.load(sys.stdin)" 2>/dev/null; then
+    local py_err
+    py_err=$(echo "$json_content" | "$_python" -c "import json,sys; json.load(sys.stdin)" 2>&1)
+    if [[ $? -eq 0 ]]; then
         pass "integration: summary.json is valid JSON"
     else
-        fail "integration: summary.json is not valid JSON"
+        fail "integration: summary.json is not valid JSON" \
+             "parse error: $py_err | first 80 chars: ${json_content:0:80}"
     fi
 else
     # Fallback: basic checks without python
@@ -726,7 +731,7 @@ test_permission_denied() {
     exit_code=$?
 
     # Restore permissions so cleanup() can delete the dir
-    chmod 755 "$locked_dir"
+    chmod u+rwx "$locked_dir"
 
     assert_exit     "perm-denied: exits non-zero"       1 "$exit_code"
     assert_contains "perm-denied: mentions the directory or permission" \
