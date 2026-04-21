@@ -1,0 +1,9 @@
+# Recon output folders
+recon_*/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
