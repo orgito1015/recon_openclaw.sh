@@ -1,0 +1,3 @@
+https://example.com [200] [Example Domain] [nginx,PHP]
+https://sub1.example.com [200] [Login Portal] [Apache,WordPress]
+https://api.example.com [200] [API Gateway] [nginx]
