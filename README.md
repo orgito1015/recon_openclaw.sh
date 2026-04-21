@@ -15,8 +15,11 @@ Automated bug bounty reconnaissance pipeline that runs a full recon workflow and
 - Content discovery (ffuf + SecLists)
 - Screenshot capture (gowitness)
 - Vulnerability scanning (nuclei + nikto)
-- Structured output with auto-generated markdown report
+- Structured output with auto-generated markdown report and JSON summary
 - Optional OpenClaw launch for analysis
+- Color-coded terminal output with per-step elapsed timing
+- Pre-flight tool verification with graceful exit on missing tools
+- Per-step error logging to `report/errors.log`
 
 ---
 
@@ -58,6 +61,39 @@ Log output to file:
 
 ---
 
+## Flags Reference
+
+| Flag | Default | Description |
+|---|---|---|
+| `--help` | — | Print usage information and exit |
+| `--with-openclaw` | off | Launch OpenClaw for AI-assisted analysis after the scan |
+| `--threads N` | `50` | Number of concurrent threads passed to `ffuf` and `naabu` |
+| `--output-dir DIR` | `recon_<target>_<timestamp>` | Override the default timestamped output folder name |
+| `--skip STEPS` | — | Comma-separated list of pipeline steps to skip (see step names below) |
+
+### Step names for `--skip`
+
+| Step name | Description |
+|---|---|
+| `subdomains` | Subdomain enumeration (subfinder + assetfinder) |
+| `alive` | Live host detection (httpx) |
+| `urls` | URL collection (gau + waybackurls) |
+| `crawl` | Web crawling (katana) |
+| `ports` | Port scanning (naabu + nmap) |
+| `tech` | Technology detection (whatweb) |
+| `ffuf` | Content discovery (ffuf) |
+| `screenshots` | Screenshot capture (gowitness) |
+| `vulns` | Vulnerability scanning (nuclei + nikto) |
+| `report` | Report generation (markdown + JSON summary) |
+
+Example — skip screenshots and nikto-heavy steps:
+
+```bash
+./recon_openclaw.sh --threads 100 --skip screenshots,vulns example.com
+```
+
+---
+
 ## Output Structure
 
 Each scan creates a timestamped folder:
@@ -86,7 +122,22 @@ recon_example.com_20260101_120000/
 │   ├── ffuf_*.json
 │   └── nikto_*.txt
 └── report/
-    └── report.md
+    ├── report.md
+    ├── summary.json
+    └── errors.log
+```
+
+`summary.json` structure:
+
+```json
+{
+  "target": "example.com",
+  "timestamp": "20260101_120000",
+  "subdomain_count": 42,
+  "live_host_count": 18,
+  "url_count": 3200,
+  "nuclei_finding_count": 5
+}
 ```
 
 ---
@@ -118,8 +169,77 @@ recon_example.com_20260101_120000/
 chmod +x recon_openclaw.sh
 ./recon_openclaw.sh example.com
 ./recon_openclaw.sh --with-openclaw example.com
+./recon_openclaw.sh --threads 100 --skip screenshots,vulns example.com
+./recon_openclaw.sh --output-dir my_recon example.com
 ./recon_openclaw.sh example.com | tee recon_run.log
+
+# Verify all tools are installed without installing anything
+./scripts/install_tools.sh --check
 ```
+
+---
+
+## Troubleshooting
+
+### Tool not found
+
+If the pipeline exits with `The following required tools are not installed or not in PATH`, run the installer:
+
+```bash
+sudo ./scripts/install_tools.sh
+```
+
+After installation, ensure your shell has the Go binary path loaded:
+
+```bash
+source ~/.bashrc   # or source ~/.zshrc
+```
+
+To confirm a specific tool is available:
+
+```bash
+which subfinder
+subfinder --version
+```
+
+### Permission denied
+
+If you see `Permission denied` when running the script, mark it executable:
+
+```bash
+chmod +x recon_openclaw.sh
+```
+
+If `install_tools.sh` fails with permission errors, ensure you are running it as root:
+
+```bash
+sudo ./scripts/install_tools.sh
+```
+
+### Empty results
+
+- **No subdomains**: The target may have no public subdomains indexed, or subfinder/assetfinder API rate limits may have been hit. Try adding API keys to `~/.config/subfinder/provider-config.yaml`.
+- **No live hosts**: All discovered subdomains may be inactive, or httpx may not be resolving them. Try running `httpx` manually against the subdomains list.
+- **No URLs**: gau and waybackurls depend on public archive indexes. Results may be sparse for newer or less-trafficked targets.
+- **Empty ffuf output**: Check that `/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt` exists. If not, re-run `sudo ./scripts/install_tools.sh` to clone SecLists.
+- **Check errors.log**: Any step failures are logged to `<output_dir>/report/errors.log` — review it for tool-specific error messages.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines when submitting a pull request:
+
+1. **Fork** the repository and create a feature branch from `main`:
+   ```bash
+   git checkout -b feature/my-improvement
+   ```
+2. **Keep changes focused** — one feature or fix per PR. Large, unrelated changes will be asked to be split up.
+3. **Test your changes** manually against a real target (or a test environment) before submitting.
+4. **Update the README** if your change adds or modifies a flag, step, or output file.
+5. **Write a clear PR description** explaining what the change does and why, including any relevant commands used for testing.
+6. **Do not commit secrets** — API keys, tokens, or credentials must never appear in the repository.
+7. Open your pull request against the `main` branch with a descriptive title.
 
 ---
 
