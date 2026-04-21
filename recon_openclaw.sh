@@ -33,6 +33,7 @@ OUT="recon_${TARGET}_${TS}"
 
 mkdir -p "$OUT"/{subdomains,alive,urls,ports,technologies,screenshots,vulnerabilities,report}
 
+echo "Starting recon for $TARGET"
 echo ""
 echo "============================================="
 echo "  Bug Bounty Recon - Starting scan"
@@ -44,7 +45,7 @@ echo ""
 # ─── 1. Subdomain Enumeration ────────────────────────────────────────────────
 echo "[*] Step 1/10 - Subdomain enumeration..."
 subfinder -d "$TARGET" -silent > "$OUT/subdomains/subfinder.txt"
-assetfinder --subs-only "$TARGET" >> "$OUT/subdomains/assetfinder.txt"
+assetfinder --subs-only "$TARGET" > "$OUT/subdomains/assetfinder.txt"
 cat "$OUT/subdomains/"*.txt | sort -u > "$OUT/subdomains/all.txt"
 echo "[+] Subdomains saved to $OUT/subdomains/all.txt"
 
