@@ -20,6 +20,7 @@ Automated bug bounty reconnaissance pipeline that runs a full recon workflow and
 - Vulnerability scanning (nuclei + nikto)
 - Structured output with auto-generated markdown report and JSON summary
 - Optional OpenClaw launch for analysis
+- Automatically skips expensive downstream steps when there is no input data
 - Color-coded terminal output with per-step elapsed timing
 - Pre-flight tool verification with graceful exit on missing tools
 - Per-step error logging to `report/errors.log`
@@ -129,6 +130,8 @@ recon_example.com_20260101_120000/
     ├── summary.json
     └── errors.log
 ```
+
+Result filenames are normalized so multi-URL targets stay readable and safe across common filesystems.
 
 `summary.json` structure:
 
