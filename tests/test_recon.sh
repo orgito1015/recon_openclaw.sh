@@ -684,6 +684,10 @@ STUB
     else
         fail "empty-alive: alive.txt unexpectedly has content"
     fi
+    assert_contains "empty-alive: skips crawling"              "$output" "skipping crawling"
+    assert_contains "empty-alive: skips port scanning"         "$output" "skipping port scanning"
+    assert_contains "empty-alive: skips screenshots"           "$output" "skipping screenshots"
+    assert_contains "empty-alive: skips vulnerability scans"   "$output" "skipping vulnerability scans"
     assert_file_exists "empty-alive: report.md still generated" "$out_dir/report/report.md"
     assert_file_exists "empty-alive: summary.json still generated" "$out_dir/report/summary.json"
 }

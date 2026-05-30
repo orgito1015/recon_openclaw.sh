@@ -96,6 +96,15 @@ should_skip() {
     echo "$SKIP_STEPS" | tr ',' '\n' | grep -qx "$1"
 }
 
+count_lines() {
+    local file="$1"
+    [[ -s "$file" ]] && wc -l < "$file" || echo 0
+}
+
+safe_name() {
+    printf '%s' "$1" | sed 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#[^A-Za-z0-9._-]#_#g'
+}
+
 # ─── Tool Check ──────────────────────────────────────────────────────────────
 REQUIRED_TOOLS=(subfinder assetfinder httpx gau waybackurls katana naabu nmap whatweb ffuf gowitness nuclei nikto)
 MISSING_TOOLS=()
@@ -162,8 +171,8 @@ if ! should_skip "subdomains"; then
         || log_error "subfinder" "subfinder failed"
     assetfinder --subs-only "$TARGET" > "$OUT/subdomains/assetfinder.txt" 2>>"$ERROR_LOG" \
         || log_error "assetfinder" "assetfinder failed"
-    cat "$OUT/subdomains/"*.txt | sort -u > "$OUT/subdomains/all.txt"
-    info "Subdomains saved to $OUT/subdomains/all.txt ($(wc -l < "$OUT/subdomains/all.txt") found) [$(elapsed)s]"
+    LC_ALL=C sort -u "$OUT/subdomains/"*.txt > "$OUT/subdomains/all.txt"
+    info "Subdomains saved to $OUT/subdomains/all.txt ($(count_lines "$OUT/subdomains/all.txt") found) [$(elapsed)s]"
 else
     step "Step 1/10 - Subdomain enumeration... [SKIPPED]"
 fi
@@ -172,9 +181,14 @@ fi
 if ! should_skip "alive"; then
     step "Step 2/10 - Live host detection..."
     start_timer
-    httpx -l "$OUT/subdomains/all.txt" -silent -title -tech-detect -o "$OUT/alive/alive.txt" 2>>"$ERROR_LOG" \
-        || log_error "httpx" "httpx failed"
-    info "Live hosts saved to $OUT/alive/alive.txt ($(wc -l < "$OUT/alive/alive.txt" 2>/dev/null || echo 0) found) [$(elapsed)s]"
+    if [[ -s "$OUT/subdomains/all.txt" ]]; then
+        httpx -l "$OUT/subdomains/all.txt" -silent -title -tech-detect -o "$OUT/alive/alive.txt" 2>>"$ERROR_LOG" \
+            || log_error "httpx" "httpx failed"
+        info "Live hosts saved to $OUT/alive/alive.txt ($(count_lines "$OUT/alive/alive.txt") found) [$(elapsed)s]"
+    else
+        : > "$OUT/alive/alive.txt"
+        info "No subdomains found; skipping live host detection [$(elapsed)s]"
+    fi
 else
     step "Step 2/10 - Live host detection... [SKIPPED]"
 fi
@@ -187,8 +201,8 @@ if ! should_skip "urls"; then
         || log_error "gau" "gau failed"
     waybackurls "$TARGET" > "$OUT/urls/wayback.txt" 2>>"$ERROR_LOG" \
         || log_error "waybackurls" "waybackurls failed"
-    cat "$OUT/urls/"*.txt | sort -u > "$OUT/urls/all_urls.txt"
-    info "URLs saved to $OUT/urls/all_urls.txt ($(wc -l < "$OUT/urls/all_urls.txt" 2>/dev/null || echo 0) collected) [$(elapsed)s]"
+    LC_ALL=C sort -u "$OUT/urls/"*.txt > "$OUT/urls/all_urls.txt"
+    info "URLs saved to $OUT/urls/all_urls.txt ($(count_lines "$OUT/urls/all_urls.txt") collected) [$(elapsed)s]"
 else
     step "Step 3/10 - URL collection... [SKIPPED]"
 fi
@@ -197,9 +211,14 @@ fi
 if ! should_skip "crawl"; then
     step "Step 4/10 - Crawling with Katana..."
     start_timer
-    katana -list "$OUT/alive/alive.txt" -o "$OUT/urls/katana.txt" 2>>"$ERROR_LOG" \
-        || log_error "katana" "katana failed"
-    info "Crawl results saved to $OUT/urls/katana.txt [$(elapsed)s]"
+    if [[ -s "$OUT/alive/alive.txt" ]]; then
+        katana -list "$OUT/alive/alive.txt" -o "$OUT/urls/katana.txt" 2>>"$ERROR_LOG" \
+            || log_error "katana" "katana failed"
+        info "Crawl results saved to $OUT/urls/katana.txt [$(elapsed)s]"
+    else
+        : > "$OUT/urls/katana.txt"
+        info "No live hosts found; skipping crawling [$(elapsed)s]"
+    fi
 else
     step "Step 4/10 - Crawling with Katana... [SKIPPED]"
 fi
@@ -208,11 +227,17 @@ fi
 if ! should_skip "ports"; then
     step "Step 5/10 - Port scanning..."
     start_timer
-    naabu -list "$OUT/alive/alive.txt" -c "$THREADS" -o "$OUT/ports/naabu.txt" 2>>"$ERROR_LOG" \
-        || log_error "naabu" "naabu failed"
-    nmap -iL "$OUT/alive/alive.txt" -oN "$OUT/ports/nmap.txt" 2>>"$ERROR_LOG" \
-        || log_error "nmap" "nmap failed"
-    info "Port scan results saved to $OUT/ports/ [$(elapsed)s]"
+    if [[ -s "$OUT/alive/alive.txt" ]]; then
+        naabu -list "$OUT/alive/alive.txt" -c "$THREADS" -o "$OUT/ports/naabu.txt" 2>>"$ERROR_LOG" \
+            || log_error "naabu" "naabu failed"
+        nmap -iL "$OUT/alive/alive.txt" -oN "$OUT/ports/nmap.txt" 2>>"$ERROR_LOG" \
+            || log_error "nmap" "nmap failed"
+        info "Port scan results saved to $OUT/ports/ [$(elapsed)s]"
+    else
+        : > "$OUT/ports/naabu.txt"
+        : > "$OUT/ports/nmap.txt"
+        info "No live hosts found; skipping port scanning [$(elapsed)s]"
+    fi
 else
     step "Step 5/10 - Port scanning... [SKIPPED]"
 fi
@@ -221,9 +246,14 @@ fi
 if ! should_skip "tech"; then
     step "Step 6/10 - Technology detection..."
     start_timer
-    whatweb -i "$OUT/alive/alive.txt" > "$OUT/technologies/whatweb.txt" 2>>"$ERROR_LOG" \
-        || log_error "whatweb" "whatweb failed"
-    info "Technology info saved to $OUT/technologies/whatweb.txt [$(elapsed)s]"
+    if [[ -s "$OUT/alive/alive.txt" ]]; then
+        whatweb -i "$OUT/alive/alive.txt" > "$OUT/technologies/whatweb.txt" 2>>"$ERROR_LOG" \
+            || log_error "whatweb" "whatweb failed"
+        info "Technology info saved to $OUT/technologies/whatweb.txt [$(elapsed)s]"
+    else
+        : > "$OUT/technologies/whatweb.txt"
+        info "No live hosts found; skipping technology detection [$(elapsed)s]"
+    fi
 else
     step "Step 6/10 - Technology detection... [SKIPPED]"
 fi
@@ -232,26 +262,21 @@ fi
 if ! should_skip "ffuf"; then
     step "Step 7/10 - Content discovery with ffuf..."
     start_timer
-    # Track processed hosts to avoid duplicates
-    FFUF_SEEN="$OUT/vulnerabilities/.ffuf_processed"
-    touch "$FFUF_SEEN"
-    while IFS= read -r url; do
-        [[ -z "$url" ]] && continue
-        # Skip already-processed hosts (deduplication)
-        if grep -qxF "$url" "$FFUF_SEEN"; then
-            continue
-        fi
-        echo "$url" >> "$FFUF_SEEN"
-        safe_name=$(echo "$url" | tr '/:' '__')
-        ffuf -u "$url/FUZZ" \
-            -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt \
-            -o "$OUT/vulnerabilities/ffuf_${safe_name}.json" \
-            -of json \
-            -mc 200,301,302,403 \
-            -t "$THREADS" \
-            -s 2>>"$ERROR_LOG" || log_error "ffuf" "ffuf failed for $url"
-    done < "$OUT/alive/alive.txt"
-    info "Content discovery results saved to $OUT/vulnerabilities/ [$(elapsed)s]"
+    if [[ -s "$OUT/alive/alive.txt" ]]; then
+        while IFS= read -r url; do
+            [[ -z "$url" ]] && continue
+            ffuf -u "$url/FUZZ" \
+                -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt \
+                -o "$OUT/vulnerabilities/ffuf_$(safe_name "$url").json" \
+                -of json \
+                -mc 200,301,302,403 \
+                -t "$THREADS" \
+                -s 2>>"$ERROR_LOG" || log_error "ffuf" "ffuf failed for $url"
+        done < <(LC_ALL=C sort -u "$OUT/alive/alive.txt")
+        info "Content discovery results saved to $OUT/vulnerabilities/ [$(elapsed)s]"
+    else
+        info "No live hosts found; skipping content discovery [$(elapsed)s]"
+    fi
 else
     step "Step 7/10 - Content discovery with ffuf... [SKIPPED]"
 fi
@@ -260,9 +285,13 @@ fi
 if ! should_skip "screenshots"; then
     step "Step 8/10 - Capturing screenshots..."
     start_timer
-    gowitness file -f "$OUT/alive/alive.txt" --destination "$OUT/screenshots" 2>>"$ERROR_LOG" \
-        || log_error "gowitness" "gowitness failed"
-    info "Screenshots saved to $OUT/screenshots/ [$(elapsed)s]"
+    if [[ -s "$OUT/alive/alive.txt" ]]; then
+        gowitness file -f "$OUT/alive/alive.txt" --destination "$OUT/screenshots" 2>>"$ERROR_LOG" \
+            || log_error "gowitness" "gowitness failed"
+        info "Screenshots saved to $OUT/screenshots/ [$(elapsed)s]"
+    else
+        info "No live hosts found; skipping screenshots [$(elapsed)s]"
+    fi
 else
     step "Step 8/10 - Capturing screenshots... [SKIPPED]"
 fi
@@ -271,15 +300,19 @@ fi
 if ! should_skip "vulns"; then
     step "Step 9/10 - Vulnerability scanning..."
     start_timer
-    nuclei -l "$OUT/alive/alive.txt" -o "$OUT/vulnerabilities/nuclei.txt" 2>>"$ERROR_LOG" \
-        || log_error "nuclei" "nuclei failed"
-    while IFS= read -r url; do
-        [[ -z "$url" ]] && continue
-        safe_name=$(echo "$url" | tr '/:' '__')
-        nikto -h "$url" -output "$OUT/vulnerabilities/nikto_${safe_name}.txt" 2>>"$ERROR_LOG" \
-            || log_error "nikto" "nikto failed for $url"
-    done < "$OUT/alive/alive.txt"
-    info "Vulnerability results saved to $OUT/vulnerabilities/ [$(elapsed)s]"
+    if [[ -s "$OUT/alive/alive.txt" ]]; then
+        nuclei -l "$OUT/alive/alive.txt" -o "$OUT/vulnerabilities/nuclei.txt" 2>>"$ERROR_LOG" \
+            || log_error "nuclei" "nuclei failed"
+        while IFS= read -r url; do
+            [[ -z "$url" ]] && continue
+            nikto -h "$url" -output "$OUT/vulnerabilities/nikto_$(safe_name "$url").txt" 2>>"$ERROR_LOG" \
+                || log_error "nikto" "nikto failed for $url"
+        done < <(LC_ALL=C sort -u "$OUT/alive/alive.txt")
+        info "Vulnerability results saved to $OUT/vulnerabilities/ [$(elapsed)s]"
+    else
+        : > "$OUT/vulnerabilities/nuclei.txt"
+        info "No live hosts found; skipping vulnerability scans [$(elapsed)s]"
+    fi
 else
     step "Step 9/10 - Vulnerability scanning... [SKIPPED]"
 fi
@@ -289,10 +322,10 @@ if ! should_skip "report"; then
     step "Step 10/10 - Generating report..."
     start_timer
 
-    SUBDOMAIN_COUNT=$(wc -l < "$OUT/subdomains/all.txt" 2>/dev/null | tr -d ' '); SUBDOMAIN_COUNT=${SUBDOMAIN_COUNT:-0}
-    ALIVE_COUNT=$(wc -l < "$OUT/alive/alive.txt" 2>/dev/null | tr -d ' ')      ; ALIVE_COUNT=${ALIVE_COUNT:-0}
-    URL_COUNT=$(wc -l < "$OUT/urls/all_urls.txt" 2>/dev/null | tr -d ' ')      ; URL_COUNT=${URL_COUNT:-0}
-    NUCLEI_COUNT=$(wc -l < "$OUT/vulnerabilities/nuclei.txt" 2>/dev/null | tr -d ' '); NUCLEI_COUNT=${NUCLEI_COUNT:-0}
+    SUBDOMAIN_COUNT=$(count_lines "$OUT/subdomains/all.txt")
+    ALIVE_COUNT=$(count_lines "$OUT/alive/alive.txt")
+    URL_COUNT=$(count_lines "$OUT/urls/all_urls.txt")
+    NUCLEI_COUNT=$(count_lines "$OUT/vulnerabilities/nuclei.txt")
 
     {
         echo "# Bug Bounty Recon Report"
