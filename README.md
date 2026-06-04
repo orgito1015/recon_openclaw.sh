@@ -35,6 +35,13 @@ cd recon_openclaw
 sudo ./scripts/install_tools.sh
 ```
 
+`install_tools.sh` is idempotent for Go-based tools by default: it installs missing Go tools and skips Go tools that are already installed.
+Use `--force` only when you want to reinstall/update all Go-based tools:
+
+```bash
+sudo ./scripts/install_tools.sh --force
+```
+
 Make the main script executable:
 
 ```bash
@@ -220,6 +227,17 @@ If `install_tools.sh` fails with permission errors, ensure you are running it as
 
 ```bash
 sudo ./scripts/install_tools.sh
+```
+
+### No space left on device (Go install)
+
+If you see errors like `write /tmp/go-build...: no space left on device`, the installer now uses
+`/var/tmp/recon_openclaw-go-<user>` for Go temporary build and cache files instead of `/tmp`.
+
+If needed, you can override it:
+
+```bash
+sudo GO_WORK_BASE=/path/with/free-space ./scripts/install_tools.sh
 ```
 
 ### Empty results
