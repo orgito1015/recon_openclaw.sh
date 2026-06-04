@@ -3,7 +3,7 @@
 # install_tools.sh
 # Description : Installs all tools required by recon_openclaw.sh
 # Tested on   : Kali Linux (2024+), Ubuntu 22.04+
-# Usage       : sudo ./install_tools.sh [--check]
+# Usage       : sudo ./install_tools.sh [--check] [--force]
 # =============================================================================
 
 set -e
@@ -18,6 +18,7 @@ warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[-]${NC} $1"; }
 
 CHECK_ONLY=0
+FORCE_REINSTALL=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -25,13 +26,30 @@ while [[ $# -gt 0 ]]; do
             CHECK_ONLY=1
             shift
             ;;
+        --force)
+            FORCE_REINSTALL=1
+            shift
+            ;;
         *)
             error "Unknown option: $1"
-            echo "Usage: sudo ./install_tools.sh [--check]"
+            echo "Usage: sudo ./install_tools.sh [--check] [--force]"
             exit 1
             ;;
     esac
 done
+
+# Prefer installing Go tools for the invoking user (when using sudo)
+INSTALL_USER="${SUDO_USER:-$USER}"
+INSTALL_HOME="$(getent passwd "$INSTALL_USER" | cut -d: -f6 2>/dev/null || true)"
+if [[ -z "$INSTALL_HOME" ]]; then
+    INSTALL_HOME="$HOME"
+fi
+GO_BIN_DIR="$INSTALL_HOME/go/bin"
+
+has_tool() {
+    local tool="$1"
+    command -v "$tool" &>/dev/null || [[ -x "$GO_BIN_DIR/$tool" ]]
+}
 
 # ─── Tool Verification ───────────────────────────────────────────────────────
 REQUIRED_TOOLS=(subfinder assetfinder httpx gau waybackurls katana naabu nmap whatweb ffuf gowitness nuclei nikto)
@@ -40,7 +58,7 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
     info "Checking installed tools..."
     ALL_OK=1
     for tool in "${REQUIRED_TOOLS[@]}"; do
-        if command -v "$tool" &>/dev/null; then
+        if has_tool "$tool"; then
             info "  [OK] $tool"
         else
             error "  [MISSING] $tool"
@@ -101,37 +119,61 @@ apt-get install -y -qq \
     whatweb
 
 # ─── Go Tools ────────────────────────────────────────────────────────────────
-export GOPATH=$HOME/go
-export PATH=$PATH:$GOPATH/bin
+export GOPATH="$INSTALL_HOME/go"
+export GOBIN="$GO_BIN_DIR"
+export PATH="$PATH:$GO_BIN_DIR"
 
+GO_WORK_BASE="${GO_WORK_BASE:-/var/tmp/recon_openclaw-go}"
+mkdir -p "$GO_WORK_BASE/tmp" "$GO_WORK_BASE/cache"
+export TMPDIR="$GO_WORK_BASE/tmp"
+export GOTMPDIR="$GO_WORK_BASE/tmp"
+export GOCACHE="$GO_WORK_BASE/cache"
+
+info "Using Go install user: $INSTALL_USER ($INSTALL_HOME)"
+info "Go temp/cache directory: $GO_WORK_BASE"
 info "Installing Go-based tools..."
 
-info "  -> subfinder"
-go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest      # tested: v2.6.6
+run_go_install() {
+    local pkg="$1"
+    if [[ "$INSTALL_USER" == "root" ]]; then
+        env GOPATH="$GOPATH" GOBIN="$GOBIN" PATH="$PATH" TMPDIR="$TMPDIR" GOTMPDIR="$GOTMPDIR" GOCACHE="$GOCACHE" \
+            go install -v "$pkg"
+    else
+        sudo -u "$INSTALL_USER" -H env GOPATH="$GOPATH" GOBIN="$GOBIN" PATH="$PATH" TMPDIR="$TMPDIR" GOTMPDIR="$GOTMPDIR" GOCACHE="$GOCACHE" \
+            go install -v "$pkg"
+    fi
+}
 
-info "  -> httpx"
-go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest                  # tested: v1.6.10
+install_go_tool() {
+    local tool_name="$1"
+    local package_ref="$2"
 
-info "  -> katana"
-go install -v github.com/projectdiscovery/katana/cmd/katana@latest                # tested: v1.1.2
+    if [[ $FORCE_REINSTALL -eq 0 ]] && has_tool "$tool_name"; then
+        warn "  -> $tool_name already installed — skipping."
+        return 0
+    fi
 
-info "  -> naabu"
-go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest               # tested: v2.3.3
+    info "  -> $tool_name"
+    run_go_install "$package_ref"
+}
 
-info "  -> nuclei"
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest             # tested: v3.3.9
+install_go_tool "subfinder" "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"      # tested: v2.6.6
 
-info "  -> gau"
-go install -v github.com/lc/gau/v2/cmd/gau@latest                                 # tested: v2.2.3
+install_go_tool "httpx" "github.com/projectdiscovery/httpx/cmd/httpx@latest"                  # tested: v1.6.10
 
-info "  -> waybackurls"
-go install -v github.com/tomnomnom/waybackurls@latest                             # tested: v0.1.0
+install_go_tool "katana" "github.com/projectdiscovery/katana/cmd/katana@latest"                # tested: v1.1.2
 
-info "  -> assetfinder"
-go install -v github.com/tomnomnom/assetfinder@latest                             # tested: v0.1.1
+install_go_tool "naabu" "github.com/projectdiscovery/naabu/v2/cmd/naabu@latest"               # tested: v2.3.3
 
-info "  -> gowitness"
-go install -v github.com/sensepost/gowitness@latest                               # tested: v3.0.7
+install_go_tool "nuclei" "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"             # tested: v3.3.9
+
+install_go_tool "gau" "github.com/lc/gau/v2/cmd/gau@latest"                                 # tested: v2.2.3
+
+install_go_tool "waybackurls" "github.com/tomnomnom/waybackurls@latest"                             # tested: v0.1.0
+
+install_go_tool "assetfinder" "github.com/tomnomnom/assetfinder@latest"                             # tested: v0.1.1
+
+install_go_tool "gowitness" "github.com/sensepost/gowitness@latest"                               # tested: v3.0.7
 
 # ─── SecLists ────────────────────────────────────────────────────────────────
 if [[ ! -d /usr/share/seclists ]]; then
@@ -143,7 +185,7 @@ fi
 
 # ─── PATH Export ─────────────────────────────────────────────────────────────
 GOBIN_EXPORT='export PATH=$PATH:$HOME/go/bin'
-for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+for rc in "$INSTALL_HOME/.bashrc" "$INSTALL_HOME/.zshrc"; do
     if [[ -f "$rc" ]]; then
         if grep -q 'go/bin' "$rc"; then
             warn "Go PATH already present in $rc — skipping."
