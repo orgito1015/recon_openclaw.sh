@@ -39,10 +39,34 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Prefer installing Go tools for the invoking user (when using sudo)
-INSTALL_USER="${SUDO_USER:-$USER}"
-INSTALL_HOME="$(getent passwd "$INSTALL_USER" | cut -d: -f6 2>/dev/null || true)"
+RAW_INSTALL_USER="${SUDO_USER:-$USER}"
+INSTALL_USER="$(printf '%s' "$RAW_INSTALL_USER" | tr -cd '[:alnum:]_-')"
+if [[ -z "$INSTALL_USER" ]]; then
+    INSTALL_USER="root"
+fi
+if [[ "$RAW_INSTALL_USER" != "$INSTALL_USER" ]]; then
+    error "Unsafe username detected in environment: '$RAW_INSTALL_USER'"
+    exit 1
+fi
+if [[ "$INSTALL_USER" == -* ]]; then
+    error "Unsafe username detected in environment: '$RAW_INSTALL_USER'"
+    exit 1
+fi
+if ! id -u "$INSTALL_USER" &>/dev/null; then
+    error "Resolved install user does not exist: $INSTALL_USER"
+    exit 1
+fi
+if command -v getent &>/dev/null; then
+    INSTALL_HOME="$(getent passwd "$INSTALL_USER" | awk -F: '{print $6}' 2>/dev/null || true)"
+else
+    INSTALL_HOME=""
+fi
 if [[ -z "$INSTALL_HOME" ]]; then
-    INSTALL_HOME="$HOME"
+    if [[ -d "/home/$INSTALL_USER" ]]; then
+        INSTALL_HOME="/home/$INSTALL_USER"
+    else
+        INSTALL_HOME="$HOME"
+    fi
 fi
 GO_BIN_DIR="$INSTALL_HOME/go/bin"
 
@@ -121,10 +145,18 @@ apt-get install -y -qq \
 # ─── Go Tools ────────────────────────────────────────────────────────────────
 export GOPATH="$INSTALL_HOME/go"
 export GOBIN="$GO_BIN_DIR"
-export PATH="$PATH:$GO_BIN_DIR"
+SAFE_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$GO_BIN_DIR"
+export PATH="$SAFE_PATH"
 
-GO_WORK_BASE="${GO_WORK_BASE:-/var/tmp/recon_openclaw-go}"
-mkdir -p "$GO_WORK_BASE/tmp" "$GO_WORK_BASE/cache"
+GO_WORK_BASE="${GO_WORK_BASE:-/var/tmp/recon_openclaw-go-${INSTALL_USER}}"
+if [[ "$GO_WORK_BASE" != /* || "$GO_WORK_BASE" == *".."* ]]; then
+    error "GO_WORK_BASE must be an absolute path without '..': $GO_WORK_BASE"
+    exit 1
+fi
+if ! install -d -m 700 "$GO_WORK_BASE" "$GO_WORK_BASE/tmp" "$GO_WORK_BASE/cache"; then
+    error "Could not create secure Go work directories at $GO_WORK_BASE"
+    exit 1
+fi
 export TMPDIR="$GO_WORK_BASE/tmp"
 export GOTMPDIR="$GO_WORK_BASE/tmp"
 export GOCACHE="$GO_WORK_BASE/cache"
@@ -136,11 +168,11 @@ info "Installing Go-based tools..."
 run_go_install() {
     local pkg="$1"
     if [[ "$INSTALL_USER" == "root" ]]; then
-        env GOPATH="$GOPATH" GOBIN="$GOBIN" PATH="$PATH" TMPDIR="$TMPDIR" GOTMPDIR="$GOTMPDIR" GOCACHE="$GOCACHE" \
+        env GOPATH="$GOPATH" GOBIN="$GOBIN" PATH="$SAFE_PATH" TMPDIR="$TMPDIR" GOTMPDIR="$GOTMPDIR" GOCACHE="$GOCACHE" \
             go install -v "$pkg"
     else
-        sudo -u "$INSTALL_USER" -H env GOPATH="$GOPATH" GOBIN="$GOBIN" PATH="$PATH" TMPDIR="$TMPDIR" GOTMPDIR="$GOTMPDIR" GOCACHE="$GOCACHE" \
-            go install -v "$pkg"
+        sudo -u "$INSTALL_USER" -H env GOPATH="$GOPATH" GOBIN="$GOBIN" PATH="$SAFE_PATH" TMPDIR="$TMPDIR" GOTMPDIR="$GOTMPDIR" GOCACHE="$GOCACHE" \
+            go install -v "$pkg" || { error "Go install failed for $pkg under user '$INSTALL_USER'"; return 1; }
     fi
 }
 
